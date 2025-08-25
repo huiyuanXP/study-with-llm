@@ -1,0 +1,37 @@
+{
+  "models": {
+    "main": {
+      "provider": "openai",
+      "modelId": "gpt-5",
+      "maxTokens": 64000,
+      "temperature": 0.2,
+      "baseURL": "https://www.dmxapi.com/v1"
+    },
+    "research": {
+      "provider": "openai",
+      "modelId": "o4-mini-deep-research-2025-06-26",
+      "maxTokens": 8700,
+      "temperature": 0.1,
+      "baseURL": "https://www.dmxapi.com/v1"
+    },
+    "fallback": {
+      "provider": "openai",
+      "modelId": "Qwen/Qwen2.5-Coder-32B-Instruct",
+      "maxTokens": 120000,
+      "temperature": 0.2,
+      "baseURL": "https://www.dmxapi.com/v1"
+    }
+  },
+  "global": {
+    "logLevel": "info",
+    "debug": false,
+    "defaultNumTasks": 10,
+    "defaultSubtasks": 5,
+    "defaultPriority": "medium",
+    "projectName": "Taskmaster",
+    "responseLanguage": "Chinese",
+    "defaultTag": "master",
+    "userId": "1234567890"
+  },
+  "claudeCode": {}
+}

@@ -1,0 +1,149 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "后端与基础设施搭建（Flask/DB/Redis/S3/Celery/CORS）",
+        "description": "搭建基础后端与基础设施（Flask + Blueprint 架构、PostgreSQL、Redis、S3/MinIO、Celery、CORS、日志与配置），为后续认证、LLM 集成、文档处理与前端接口提供稳定基座。",
+        "details": "技术栈与依赖：\n- Python 3.11+, Flask 3.x, SQLAlchemy 2.x, Alembic, Flask-CORS, Flask-Migrate, psycopg2-binary\n- Redis (cache 与 Celery broker/backend), Celery 5.x, boto3 (S3/MinIO), pydantic-settings (集中化配置)\n- 目录结构：\n  - backend/\n    - app/__init__.py (create_app 工厂，注册蓝图 auth/chat/docs/knowledge/flashcards)\n    - app/config.py (从环境变量加载：DATABASE_URL, REDIS_URL, S3_ENDPOINT, S3_BUCKET, SECRET_KEY)\n    - app/extensions.py (db, migrate, redis, s3_client, cors, celery)\n    - app/blueprints/{auth,chat,docs,knowledge,flashcards}/__init__.py\n    - app/models/__init__.py (BaseModel, 时间戳 mixin)\n    - app/tasks/__init__.py (celery 实例), tasks parsing/extraction\n    - wsgi.py\n  - docker-compose.yml (postgres, redis, minio, backend)\n  - Dockerfile (多阶段构建)\n- 初始化代码（伪代码）：\n  def create_app():\n    app = Flask(__name__)\n    app.config.from_object(Config())\n    db.init_app(app); migrate.init_app(app, db)\n    cors.init_app(app, resources={r\"/api/*\": {\"origins\": \"*\"}})\n    register_blueprints(app)\n    init_s3_client(app)\n    init_celery(app)\n    @app.get('/api/health')\n    def health(): return {\"status\":\"ok\"}\n    return app\n- Alembic 初始化与基础表（users, documents 占位）迁移脚本\n- S3/MinIO：使用 boto3.client('s3', endpoint_url=S3_ENDPOINT), 默认启用 SSE-S3\n- 安全与网络：启用 HTTPS 预留、统一请求/响应日志、错误处理器、CORS 策略最小化开放\n- API 路由占位：/api/auth, /api/chat, /api/documents, /api/knowledge, /api/flashcards\n- 部署脚本：.env.sample，docker-compose for local\n",
+        "testStrategy": "- 配置与健康检查：pytest + Flask test client 调用 /api/health 返回 200\n- Alembic 迁移：在 CI 中执行 alembic upgrade head 验证\n- 连接性：容器内连通 Postgres/Redis/MinIO，失败时给出清晰错误\n- 基础安全检查：SECRET_KEY 必填、CORS 限制生效、S3 写读一个测试对象成功\n- 日志：启动时打印版本/环境，错误路径写入 stderr 并可在 docker logs 中检索\n- 合同测试：蓝图已注册，路由占位返回 501 Not Implemented（或 200 空壳）以保证前端可连通占位接口\n- 负载冒烟：对 /api/health 进行并发 100 压测确保基线稳定性\n\n----------------------------------------\n注意：优先保证最小可运行闭环（Flask+DB+Redis+S3），前端可访问健康检查。 ",
+        "priority": "medium",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 2,
+        "title": "用户与认证授权（JWT、偏好与风格）",
+        "description": "实现用户模型与认证授权（JWT），包含注册、登录、刷新、登出、用户偏好与风格设置、基础使用统计字段，确保后续个性化与权限控制。",
+        "details": "数据模型（PostgreSQL，SQLAlchemy）：\n- users：id(uuid pk), email(unique), password_hash, display_name, preferences(jsonb), style(jsonb), stats(jsonb), created_at, updated_at, last_login_at\n- 密码哈希：argon2-cffi（Argon2id）\nAPI 设计（Blueprint: /api/auth）：\n- POST /register {email,password,display_name}\n- POST /login {email,password} -> {access_token,refresh_token}\n- POST /refresh {refresh_token}\n- POST /logout（可选：服务端维护 token denylist）\n- GET /me -> 用户基本信息 + 偏好/风格\n- PATCH /me {preferences?, style?}\n实现要点：\n- Flask-JWT-Extended 配置，access(15min)/refresh(7d) 生命周期\n- 装饰器 @jwt_required() 保护受限接口\n- 入参校验：pydantic BaseModel\n- 速率限制预留（后续可在全局接入 Flask-Limiter）\n伪代码：\n  @auth_bp.post('/login')\n  def login():\n    u = User.query.filter_by(email=payload.email).first()\n    if not u or not argon2.verify(payload.password, u.password_hash): abort(401)\n    return {\"access_token\": create_access_token(u.id), \"refresh_token\": create_refresh_token(u.id)}\n",
+        "testStrategy": "- 单元：密码哈希/验证、JWT 生成与过期、入参校验失败返回 400\n- 集成：注册→登录→访问受保护接口→刷新 token→登出 流程\n- 安全：\n  - 暴力破解保护（登录端点速率限制，后续接 Flask-Limiter）\n  - 密码最小强度校验\n  - 邮箱唯一性约束冲突 409\n- 迁移回滚：Alembic 升降级不丢失关键数据\n- 兼容：preferences/style JSONB 的默认/空对象处理一致性\n- 日志：登录失败/成功审计日志包含 user_id/ip（脱敏） ",
+        "priority": "medium",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 3,
+        "title": "LLMClient（Claude）集成与上下文管理",
+        "description": "集成 Claude（Anthropic）为主的 LLMClient，统一会话/提示模板、上下文管理、重试与超时、成本与令牌使用日志，为聊天、知识抽取、练习与卡片生成提供服务。",
+        "details": "依赖：anthropic>=0.30.0（Messages API），tenacity（重试），httpx（超时）\n环境变量：ANTHROPIC_API_KEY，CLAUDE_MODEL=claude-3-5-sonnet-20240620（可配）\n类设计：\n- class LLMClient:\n  - __init__(api_key, model, timeout=30s)\n  - complete(messages: list[{role, content}], system: str = None, max_tokens=1024, temperature=0.2, response_format=None) -> text/json\n  - extract_json(prompt, schema_hint) -> dict（强制 JSON 输出，失败时重试）\n  - select_relevant_chunks(query, chunks, k=8) 简单关键词/TF-IDF 召回（后续可替换向量检索）\n  - logging：记录 tokens_in/tokens_out/cost 估算\n调用（伪代码）：\n  from anthropic import Anthropic\n  client = Anthropic(api_key=...)\n  resp = client.messages.create(\n    model=self.model,\n    system=system,\n    max_tokens=max_tokens,\n    temperature=temperature,\n    messages=[{\"role\":\"user\",\"content\": prompt_or_messages}]\n  )\n  return resp.content[0].text\n重试与超时：\n  @retry(reraise=True, stop=stop_after_attempt(3), wait=wait_exponential(1,8))\n  def _call(): ...\n上下文策略：\n- 文档场景使用 chunking（按段/页），基于关键词筛选 top-k，拼接为上下文段落，严格提示“仅基于引用内容回答并给出页码”。\n- 控制上下文窗口长度：切分至接近 max_tokens 上限，避免超限\n安全：从服务端持有 API Key，不在前端暴露\n",
+        "testStrategy": "- 单元：complete()/extract_json() 在 mock 下多种响应路径；超时与重试逻辑覆盖\n- 合同：对固定 prompt 返回稳定结构（使用本地假客户端/fixture）\n- 负载：并发 20 请求不相互阻塞，连接池大小合适\n- 容错：API Key 缺失/无效时给出 500 + 明确错误码；速率限制超限时退避重试\n- 成本日志：记录每日 tokens 统计，阈值预警（日志断言） ",
+        "priority": "medium",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 4,
+        "title": "基础聊天：API 与前端界面（Vanilla JS）",
+        "description": "实现基础聊天 API 与前端聊天界面（Vanilla JS），支持消息历史、基本上下文、前端 localStorage 持久化，并通过 LLMClient 获取回复。",
+        "details": "后端（/api/chat）：\n- POST /api/chat {message:string, history?:[{role,content}], system?:string}\n- 服务器端合并最近 N 条消息（可选从 Redis/DB 取），调用 LLMClient.complete 返回 assistant 消息\n- 系统提示模板：教学导向、简洁、引用需要时请求澄清\n- 基本安全：JWT 保护；输入长度限制；敏感字符过滤\n伪代码：\n  @chat_bp.post('/chat')\n  @jwt_required()\n  def chat():\n    body = ChatSchema(**request.json)\n    msgs = build_history(body.history) + [{\"role\":\"user\",\"content\": body.message}]\n    answer = llm.complete(messages=msgs, system=SYSTEM_PROMPT)\n    return {\"reply\": answer}\n前端（Vanilla JS）：\n- 页面：chat.html + chat.css + chat.js\n- 功能：\n  - 输入框发送 → fetch('/api/chat') → 渲染应答\n  - localStorage 持久化消息（每个用户/会话 key）\n  - 简易重试与中止按钮\n  - 基础样式：左右气泡、滚动跟随\n- 错误处理：token 过期提示重新登录；网络失败重试\n",
+        "testStrategy": "- 后端：pytest 集成测试，构造 5~10 轮对话，验证上下文拼接与响应 200\n- 前端：\n  - 单页冒烟：加载、发送消息、刷新后历史仍在（localStorage）\n  - E2E（Playwright）：输入“Hello”获得非空回复\n- 限制：消息>4k 字符返回 413；空消息 400\n- 安全：未登录访问 401；XSS 通过转义渲染避免\n- 性能：单用户连续 10 次请求平均延迟记录并阈值告警 ",
+        "priority": "medium",
+        "dependencies": [
+          1,
+          2,
+          3
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 5,
+        "title": "文档上传与解析（PDF/PPT）流水线",
+        "description": "实现文档上传与解析流水线：支持 PDF 与 PPT（MVP），后端接收大文件直传至 S3/MinIO，异步 Celery 解析为结构化内容并入库，提供状态查询。",
+        "details": "数据模型：\n- documents：id(uuid), user_id, filename, mime, size, storage_key, status(enum:uploaded|processing|parsed|failed), meta(jsonb), created_at, updated_at\n- document_contents：id, document_id, page_index, text, blocks(jsonb: 块/段/位置), created_at\nAPI：\n- POST /api/documents/upload (multipart) -> {document_id}\n- GET /api/documents/{id}/status -> {status, pages}\n- GET /api/documents/{id}/content?page=? -> 文本/块\n存储：\n- 直传后由后端 PutObject 到 S3；对象键：documents/{uuid}/{filename}\n解析（Celery 任务）：\n- PDF：PyMuPDF(fitz) 读取每页文本与位置（blocks = span bbox），提取段落\n- PPT：python-pptx 提取每张幻灯片文本框内容与顺序\n- 失败重试：max 3 次；状态更新；错误日志\n伪代码：\n  @docs_bp.post('/documents/upload')\n  def upload():\n    file = request.files['file']\n    doc = Document(..., status='uploaded')\n    s3.put_object(Bucket=..., Key=storage_key, Body=file)\n    enqueue(parse_document_task.s(doc.id))\n    return {\"document_id\": doc.id}\n  @celery.task\n  def parse_document_task(doc_id):\n    set_status(doc_id,'processing')\n    if mime==pdf: parse_pdf()\n    elif mime in (ppt, pptx): parse_ppt()\n    set_status(doc_id,'parsed')\n支持的格式扩展预留：DOCX（python-docx）、TXT/MD（markdown2/纯文本）、图片（Tesseract OCR）\n",
+        "testStrategy": "- 上传集成测试：10MB PDF 与 PPT 正确返回 document_id\n- 解析单元：对样例 PDF 检查 page_count/首段文本/blocks bbox 存在\n- 幂等：重复解析任务仅一次入库（唯一约束 + upsert）\n- 大文件：50MB PDF 解析不超时（拆页处理）\n- 错误路径：损坏文件解析失败→status=failed 并附错误信息\n- 安全：仅登录用户可上传；文件类型白名单；扫描危险 mime；对象键不含用户可控路径\n- 性能：Celery 并行 worker=2~4，基线吞吐测量 ",
+        "priority": "medium",
+        "dependencies": [
+          1,
+          2
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 6,
+        "title": "文档查看器与选区上下文问答",
+        "description": "实现文档查看器与文本选区上下文问答：前端支持 PDF 渲染与高亮选择，后端基于选择片段定位上下文并调用 LLM 生成带文档引用的回答。",
+        "details": "前端（Vanilla JS + pdf.js）：\n- viewer.html 渲染 PDF（/api/documents/{id}/file 或 S3 预签名 URL）\n- 文本选择：监听 mouseup，获取选中文本、页码与近似 bbox；高亮与取消高亮\n- 上下文问答：POST /api/query/contextual {document_id, page, text, bbox?}\n- 展示回答并在文内显示引用页码/位置锚点\n后端：\n- GET /api/documents/{id}/file -> 生成 S3 预签名下载 URL（短时效）\n- POST /api/query/contextual：\n  - 根据 document_contents 定位 page 与附近 blocks，构造上下文段落（包含所选文本前后邻域）\n  - LLMClient.complete(system=“严格基于提供的文档片段回答，列出引用页码与原文证据”)\n  - 返回 {answer, citations:[{page, text_snippet}]}，并记录查询日志（可选）\n伪代码：\n  ctx = build_context(doc_id, page, text, bbox)\n  answer = llm.complete(messages=[{\"role\":\"user\",\"content\": f\"问题: {q}\\n上下文:\\n{ctx}\"}], system=SYS)\n  return {\"answer\": answer, \"citations\": extract_citations(ctx)}\n",
+        "testStrategy": "- 前端：选择跨行文本后发送请求，返回答案含至少一个 citations 项\n- 后端：\n  - 定位算法：给定选中文本能在该页 blocks 中匹配出起止索引（模糊匹配）\n  - 无法定位时降级为全文页上下文；响应中标注降级\n- 安全：仅拥有者可访问文档；预签名 URL 最长 5 分钟\n- 质量：随机抽样 20 次问答人工评估引用准确率>80%\n- 性能：上下文构造<150ms；总响应<5s（LLM 依赖） ",
+        "priority": "medium",
+        "dependencies": [
+          2,
+          3,
+          5
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 7,
+        "title": "知识点抽取、存储与解释接口",
+        "description": "实现知识点抽取与存储：从解析后的文档分块调用 LLM 抽取结构化知识点（含依赖），入库与去重，并提供获取与解释接口。",
+        "details": "数据模型：\n- knowledge_points：id(uuid), document_id, title, content_md, source_page, source_location(jsonb), created_by('system'), created_at\n- knowledge_dependencies：id, kp_id, depends_on_kp_id\n- user_kp_mastery：id, user_id, kp_id, level(0-5), last_reviewed, review_history(jsonb)\nCelery 任务：extract_kps_task(document_id)\n- 从 document_contents 按页/段切分，调用 llm.extract_json(prompt, schema_hint)\n- schema_hint 要求输出：title, content(markdown), dependencies(标题或局部 ID)、source_location\n- 去重策略：基于 title 归一化 + 文本相似度（快速：minhash/TF-IDF）\n- 依赖解析：将依赖标题映射至 kp_id，不存在时稍后补全\nAPI：\n- POST /api/knowledge/extract {document_id}\n- GET /api/knowledge?document_id=...\n- GET /api/knowledge/{kp_id}\n- POST /api/knowledge/{kp_id}/explain {style?,level?} 使用用户偏好生成解释\n提示模板关键点：\n- 严格 JSON 输出；内容使用 Markdown；标注来源页码\n- 简洁命名标题；避免重复；依赖仅保留必要先修\n伪代码：\n  chunks = load_doc_chunks(doc_id)\n  for ch in chunks: items = llm.extract_json(prompt(ch), schema)\n  upsert_knowledge_points(items)\n",
+        "testStrategy": "- 单元：JSON 解析与 pydantic 校验；依赖解析正确建立多对多关系\n- 幂等：重复抽取不会产生重复 kp（唯一索引 title+document_id）\n- 质量抽检：随机 30 个 kp，人工评估正确率（标题清晰、内容完整、依赖合理）\n- 性能：每 1k tokens 文本抽取不超过 1 次 LLM 调用；批处理并行度控制\n- 回退：LLM JSON 失败时自动重试并降级为更小上下文 ",
+        "priority": "medium",
+        "dependencies": [
+          2,
+          3,
+          5
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 8,
+        "title": "闪卡生成、学习与 Anki 导出",
+        "description": "实现基于知识点的闪卡生成、存储与学习界面，支持多卡片类型（Basic/Cloze/Conceptual/Problem-solving/Reverse），并提供 Anki 导出（.apkg）。",
+        "details": "数据模型：\n- flashcards：id(uuid), kp_id, type(enum), front, back, difficulty(1-5), metadata(jsonb), created_at\n- user_flashcard_progress：id, user_id, card_id, easiness(sm2), interval, repetitions, due_at, last_result\n生成：\n- POST /api/flashcards/generate {document_id|kp_ids} -> 为每个 kp 生成若干类型卡片（调用 LLM 模板化）\n- 复习调度：SM-2 算法（本地实现），GET /api/flashcards/next 返回待复习队列\n- 复习记录：POST /api/flashcards/review {card_id,quality(0-5)} 更新进度\nAnki 导出：\n- 依赖 genanki 生成 .apkg（内置 Basic/Cloze 模板），下载端点 GET /api/flashcards/export?deck=...\n前端（Vanilla JS）：\n- flashcards.html：展示待复习卡片，快捷键（1-5）评分，支持图片/Markdown 渲染\n伪代码（SM-2）：\n  if quality <3: repetitions=0; interval=1\n  else:\n    if repetitions==0: interval=1\n    elif repetitions==1: interval=6\n    else: interval=round(interval*easiness)\n  easiness = max(1.3, easiness + (0.1 - (5-quality)*(0.08+(5-quality)*0.02)))\n  due_at = now + interval days\n",
+        "testStrategy": "- 生成：对 20 个 kp 批量生成卡片，校验类型覆盖与字段完整\n- 调度：构造不同评分序列，断言 SM-2 参数变化正确；到期排序正确\n- 导出：生成 .apkg 并在 Anki 客户端导入成功（手动+自动文件结构校验）\n- 前端：E2E 流程 从“下一张”到“评分”再到“下一张”；localStorage 保存上次会话视图状态\n- 安全：仅拥有者可导出/复习其卡片；速率限制导出端点 ",
+        "priority": "medium",
+        "dependencies": [
+          2,
+          7
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 9,
+        "title": "知识树构建与可视化（D3.js）",
+        "description": "实现知识树生成与可视化：将知识点依赖构造成 DAG/层级结构，提供可视化 JSON 数据与前端交互（展开/收起、跳转到知识点详情）。",
+        "details": "后端：\n- 算法：\n  - 构建有向图 G(V=KP, E=依赖)\n  - 检测并打断循环（记录为数据问题，保留参考）\n  - 层级分层：对 DAG 执行拓扑排序，level(kp)=最大依赖 level+1\n  - 聚合指标：每个节点计算被依赖数、用户平均掌握度\n- API：GET /api/knowledge/tree?document_id=... -> {nodes:[{id,title,level,mastery}], edges:[{source,target}]}\n前端（Vanilla JS + D3.js）：\n- knowledge_tree.html：支持缩放、拖拽、点击节点显示简介与“前往解释/卡片”操作\n- 根据 mastery 着色；悬停显示来源页码\n伪代码：\n  graph = build_graph(kps, deps)\n  levels = topo_levels(graph)\n  return {nodes:[...], edges:[...]}\n",
+        "testStrategy": "- 算法：\n  - 人工构造小图验证 levels 正确\n  - 循环检测：存在环时 API 返回 warning 并仍提供近似层级\n- 性能：1000 节点图生成<500ms\n- 前端：节点交互与链接跳转正确；不同 mastery 渲染颜色带图例\n- 可用性：移动端基本查看可用（平移/缩放） ",
+        "priority": "medium",
+        "dependencies": [
+          7
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 10,
+        "title": "练习抽取/生成、个性化解析与跟踪",
+        "description": "实现练习管理：从文档/知识点抽取与生成练习题，提供个性化解题思路与解析，记录尝试历史并支持间隔重复。",
+        "details": "数据模型：\n- exercises：id(uuid), document_id?, kp_ids[], statement, solution_outline, difficulty(1-5), metadata(jsonb), created_at\n- user_exercise_attempts：id, user_id, exercise_id, timestamp, result(success|failure|partial), notes, time_spent\n- user_exercise_schedule：id, user_id, exercise_id, due_at, repetitions, easiness, interval\n生成功能：\n- POST /api/exercises/generate {document_id|kp_ids, count?, difficulty?}\n  - 使用 LLM：为每个 kp 生成多样题型（选择/简答/计算/证明），返回严格 JSON\n  - 解析生成：solution_outline 包含步骤、易错点、与 kp 映射\n- 个性化解析：POST /api/exercises/{id}/explain {style?, detail_level?} 基于用户风格与掌握度调整\n- 练习队列：GET /api/exercises/next 返回到期题目\n- 记录尝试：POST /api/exercises/attempt {exercise_id, result, time_spent, notes?} 更新调度（SM-2 类似）\n提示模板要点：\n- 严格禁止泄露答案在 statement 段；solution_outline 单独返回\n- 题干中保持统一术语；数学公式用 Markdown 的 LaTeX 语法（前端渲染可接入 KaTeX）\n伪代码：\n  items = llm.extract_json(prompt_generate(kp_chunk), schema)\n  upsert_exercises(items)\n  schedule_on_create(items)\n",
+        "testStrategy": "- 生成正确性：JSON schema 校验；不同难度分布合理性检查\n- 个性化：相同题目在不同用户风格下解析差异可见（措辞、示例）\n- 调度：多次 attempt 后 due_at 变化符合预期；失败重置间隔\n- 质量抽检：随机 30 道题人工评估合理性与与 kp 相关度>80%\n- 安全与成本：批量生成合并上下文，限制单次 count；记录 tokens 预算；无登录 401\n- 前端占位：简单练习作答界面原型（可与卡片 UI 复用组件） ",
+        "priority": "medium",
+        "dependencies": [
+          2,
+          3,
+          7
+        ],
+        "status": "pending",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "created": "2025-08-15T18:17:42.847Z",
+      "updated": "2025-08-15T18:17:42.847Z",
+      "description": "Tasks for master context"
+    }
+  }
+}

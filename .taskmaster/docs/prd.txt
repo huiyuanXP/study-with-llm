@@ -1,0 +1,328 @@
+# Technical Architecture
+
+## System Components
+
+1. **Frontend Layer**
+   - Chat interface (Vanilla JavaScript)
+   - Document viewer with text selection capabilities
+   - Flashcard interface
+   - Knowledge tree visualization
+   - Cheatsheet generator interface
+
+2. **Backend Layer**
+   - Flask application server
+   - Blueprint-based routing system
+   - Authentication and user management
+   - Document processing pipeline
+   - LLM interaction service
+
+3. **LLM Integration Layer**
+   - Custom LLMClient for API communication
+   - Prompt engineering and management
+   - Context handling and optimization
+
+4. **Storage Layer**
+   - User data storage
+   - Cross-user knowledge base
+   - Document cache and parsing results
+   - Flashcard database
+
+## Data Models
+
+1. **User Model**
+   - Authentication details
+   - Learning preferences
+   - Style preferences for explanations
+   - Usage statistics
+
+2. **Document Model**
+   - Original document metadata
+   - Parsed content
+   - Knowledge points extracted
+   - Problem examples identified
+
+3. **Knowledge Point Model**
+   - Content description
+   - Related materials
+   - Mastery level per user
+   - Dependencies with other knowledge points
+
+4. **Flashcard Model**
+   - Front content (question)
+   - Back content (answer)
+   - Metadata (knowledge point, difficulty)
+   - Study progress tracking
+
+5. **Exercise Model**
+   - Problem statement
+   - Solution approach
+   - Related knowledge points
+   - User attempt history
+
+6. **Knowledge Tree Model**
+   - Hierarchical structure
+   - Node relationships
+   - Metadata for visualization
+
+## APIs and Integrations
+
+1. **Internal APIs**
+   - Document processing API
+   - LLM request/response API
+   - User data management API
+   - Knowledge base query API
+
+2. **External Integrations**
+   - LLM provider APIs (Claude, potentially others)
+   - Document conversion services
+   - Anki export API
+   - (Future) Video generation services
+
+## Infrastructure Requirements
+
+1. **Compute Resources**
+   - Application servers for Flask backend
+   - Document processing workers
+
+2. **Storage Resources**
+   - Database for structured data (PostgreSQL)
+   - Document storage (S3 or equivalent)
+   - Cache layer (Redis)
+
+3. **Networking**
+   - API gateway
+   - Load balancing
+   - CDN for static assets
+
+4. **Security**
+   - Authentication service
+   - Data encryption
+   - API rate limiting
+
+# Development Roadmap
+
+## Phase 1: Foundation & Core Chat (MVP)
+
+1. **Core Platform Setup**
+   - Set up Flask application with blueprint structure
+   - Implement basic user authentication
+   - Create LLM client interface
+   - Establish database schema for user data
+
+2. **Basic Chat Interface**
+   - Implement chat UI with message history
+   - Connect to LLM API via LLMClient
+   - Add basic context handling
+   - Implement local storage for chat persistence
+
+3. **Document Upload & Parsing**
+   - Create document upload interface
+   - Implement basic PDF and PPT parsing
+   - Store parsed content in user data
+   - Display parsed documents in viewer
+
+## Phase 2: Knowledge Management & Learning Tools
+
+1. **Knowledge Point Extraction**
+   - Implement extraction of knowledge points from documents
+   - Create knowledge point storage and retrieval
+   - Develop knowledge point mastery tracking
+   - Build knowledge point explanation interface
+
+2. **Text Selection & Contextual Queries**
+   - Implement text selection in document viewer
+   - Add contextual query generation from selected text
+   - Create response generation with document context
+   - Develop enhanced context handling with document references
+
+3. **Flashcard Generation**
+   - Create flashcard generation from knowledge points
+   - Implement flashcard storage and retrieval
+   - Build flashcard study interface
+   - Add Anki export functionality
+
+## Phase 3: Enhanced Learning Experience
+
+1. **Knowledge Tree Generation**
+   - Implement knowledge tree algorithm
+   - Create tree visualization interface
+   - Add interaction with knowledge tree
+   - Enable drilling down into specific knowledge points
+
+2. **Exercise Management**
+   - Build exercise extraction from documents
+   - Create exercise generation based on knowledge points
+   - Implement personalized solution explanations
+   - Develop exercise tracking and spaced repetition
+
+3. **Cheatsheet Generation**
+   - Implement cheatsheet generation algorithm
+   - Create customizable formatting options
+   - Add export capabilities (PDF, image)
+   - Enable optimization based on user mastery
+
+## Phase 4: Advanced Features & Optimization
+
+1. **Cross-User Knowledge Base**
+   - Implement shared knowledge repository
+   - Create content moderation system
+   - Add contribution tracking
+   - Develop knowledge base search and discovery
+
+2. **Document Translation**
+   - Implement document translation while preserving formatting
+   - Add language detection
+   - Create terminology consistency across translations
+   - Build side-by-side view of original and translated content
+
+3. **Personalization Engine**
+   - Implement learning style detection
+   - Create adaptive explanation generation
+   - Develop personalized study plans
+   - Build progress analytics dashboard
+
+4. **Performance Optimization**
+   - Implement caching strategies
+   - Optimize LLM prompt efficiency
+   - Enhance document processing pipeline
+   - Improve frontend responsiveness
+
+# Logical Dependency Chain
+
+## Foundation Layer (Build First)
+1. Flask application setup with routing
+2. Basic user authentication
+3. LLM client integration
+4. Document upload and basic parsing
+5. Simple chat interface
+
+## Core Features Layer
+1. Document parsing with knowledge point extraction
+2. Text selection and contextual queries
+3. Knowledge point storage and explanation
+4. Basic flashcard generation and study
+
+## Enhanced Features Layer
+1. Knowledge tree generation and visualization
+2. Exercise extraction and personalized explanations
+3. Cheatsheet generation with formatting options
+4. Advanced flashcard study with spaced repetition
+
+## Advanced Features Layer
+1. Cross-user knowledge base
+2. Document translation
+3. Personalized learning adaptations
+4. Analytics and progress tracking
+
+## Frontend-First Approach
+- Implement a functioning chat interface first for immediate user feedback
+- Add document viewer with selection capabilities early
+- Focus on creating visible, functional components before backend optimizations
+- Implement features incrementally with user-visible results at each step
+
+# Risks and Mitigations
+
+## Technical Challenges
+
+1. **Document Parsing Accuracy**
+   - **Risk**: Inconsistent extraction of knowledge points from varied document formats
+   - **Mitigation**: Use specialized parsers for different formats, implement human verification, iteratively improve extraction algorithms
+
+2. **LLM Context Limitations**
+   - **Risk**: Exceeding context window limitations with large documents
+   - **Mitigation**: Implement chunking strategies, relevant context selection, and hierarchical summarization
+
+3. **Knowledge Representation**
+   - **Risk**: Difficulty in structuring knowledge points into meaningful relationships
+   - **Mitigation**: Start with simpler taxonomies, use expert knowledge to validate relationships, iteratively refine
+
+## MVP Scoping
+
+1. **Feature Overreach**
+   - **Risk**: Attempting too many complex features initially, delaying usable product
+   - **Mitigation**: Focus on core chat and document parsing first, prioritize features with highest learning impact
+
+2. **User Experience Consistency**
+   - **Risk**: Disjointed experience as features are added incrementally
+   - **Mitigation**: Design unified UX from the start, implement skeleton UI early, ensure consistent interaction patterns
+
+3. **Integration Complexity**
+   - **Risk**: Difficulty integrating multiple components (parsing, LLM, storage)
+   - **Mitigation**: Define clear interfaces between components, use modular design, implement integration tests
+
+## Resource Constraints
+
+1. **LLM API Costs**
+   - **Risk**: High operational costs due to frequent LLM API calls
+   - **Mitigation**: Implement caching, optimize prompt design, batch similar requests, consider smaller models for certain tasks
+
+2. **Storage Requirements**
+   - **Risk**: Rapid growth of storage needs for documents and generated content
+   - **Mitigation**: Implement content pruning policies, use tiered storage, compress where appropriate
+
+3. **Processing Performance**
+   - **Risk**: Slow processing of large documents
+   - **Mitigation**: Implement background processing, show incremental results, optimize parsing algorithms
+
+# Appendix
+
+## Research Findings
+
+### LLM Performance for Educational Tasks
+
+Based on preliminary testing, LLMs show particular strengths in:
+- Explaining concepts with personalized analogies
+- Generating varied practice questions
+- Structuring knowledge in hierarchical relationships
+
+Areas requiring enhancement:
+- Mathematical notation rendering
+- Consistent terminology across explanations
+- Domain-specific accuracy in specialized fields
+
+### Effective Learning Methodologies
+
+Research indicates the following approaches are most effective:
+- Spaced repetition for knowledge retention
+- Varied problem types for concept mastery
+- Interconnected knowledge visualization
+- Personalized explanation styles
+
+## Technical Specifications
+
+### Document Processing Pipeline
+
+1. Document upload and format detection
+2. Format-specific parsing (PDF, PPT, DOCX,TXT,MARKDOWN,PICTURE_FORMAT)
+3. Content extraction and structuring
+4. Knowledge point identification
+5. Exercise extraction
+6. Storage in normalized format
+
+### Knowledge Point Representation
+
+```json
+{
+  "id": "uuid",
+  "title": "String",
+  "content": "Markdown string",
+  "source_document": "document_id",
+  "source_location": {"page": 5, "position": {"x": 100, "y": 200}},
+  "dependencies": ["knowledge_point_id1", "knowledge_point_id2"],
+  "mastery_data": {
+    "user_id": {
+      "level": 0-5,
+      "last_reviewed": "timestamp",
+      "review_history": [{"timestamp": "date", "result": "success|failure"}]
+    }
+  }
+}
+```
+
+### Flashcard Formats
+
+1. **Basic**: Simple front/back
+2. **Cloze**: Fill-in-the-blank with context
+3. **Conceptual**: Explaining relationships between concepts
+4. **Problem-solving**: Exercise with step-by-step solution
+5. **Reverse**: Bidirectional testing of knowledge
