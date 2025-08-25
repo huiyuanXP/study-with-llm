@@ -11,7 +11,7 @@
     </form>
   </div>
   <aside class="side">
-    <h3>新手提示</h3>
+    <h3>新手提示</h3>SSSS
     <ol>
       <li>前端结构：<code>chat.html</code></li>
       <li>前端逻辑：<code>static/js/chat.js</code></li>
@@ -21,5 +21,6 @@
     <p>支持命令：<code>/help</code>、<code>/sum 3 5</code>、<code>/upper 你好</code>、<code>时间</code></p>
   </aside>
 </section>
+<script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
 <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
 {% endblock %}

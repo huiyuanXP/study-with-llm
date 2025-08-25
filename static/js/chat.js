@@ -42,7 +42,7 @@
 
       const bubble = document.createElement("div");
       bubble.className = "bubble " + (role === "user" ? "bubble-user" : "bubble-bot");
-      bubble.textContent = text;
+      bubble.innerHTML = (window.markdownToHtml ? window.markdownToHtml(text) : (text || ''));
 
       // === 新增: 复制按钮 ===
       const copyBtn = document.createElement("button");
